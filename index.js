@@ -5,7 +5,7 @@
 
 (function() {
 
-  const beatsPerMinute = 120;
+  const beatsPerMinute = 260;
   const mainGainDb = -10
 
   // Each sub-array is a single note of format:
@@ -14,24 +14,31 @@
   // Default values are:
   // [ 1, 0, 0, 0]
   // To play a rest, set frequency to zero
+  const dt = 0.1
   const sequencedData = [
-    [1, 0.5],
-    [1, 0.5, 180],
-    [1, 0.5, 160],
-    [1, 0.5, 150],
-    [1, 0.5, 140],
-    [1, 0.5, 130],
-    [1, 0.5, 120],
-    [1, 0.5, 110],
-    [1, 2, 100],
+    [1, dt],   // Start gap
+    [2, dt],
 
-    [2, 1, 200],
-    [2, 1, 250],
-    [2, 0.5, 300],
-    [2, 0.5, 350],
-    [2, 0.5, 450],
-    [2, 0.5, 425],
-    [2, 4, 400],
+    [1, 1],
+    [1, 1, 180],
+    [1, 1, 160],
+    [1, 1, 150],
+    [1, 1, 140],
+    [1, 1, 130],
+    [1, 1, 120],
+    [1, 1, 110],
+    [1, 4, 100],
+
+    [2, 2, 200],
+    [2, 2, 250],
+    [2, 1, 300],
+    [2, 1, 350],
+    [2, 1, 450],
+    [2, 1, 425],
+    [2, 6, 400],
+
+    [1, dt],   // End gap
+    [2, dt],
   ]
 
   const triOsc = {type: 'triangle'}
@@ -50,26 +57,25 @@
   // Bug in FMSynth - oscillator and modulation appear not to work...
 
   const minGain = -200
+  const gainChangeMs = 500
+  const timeConstantS = 0.001 * gainChangeMs
   Tone.Transport.bpm.value = beatsPerMinute;
-  let toneArray = [];
+  let channelToneArray = [];
   let tonesSetup = false
 
   function setupTones() {
     console.log('Setting up tones')
-    toneArray = []
-    channelSetupArray.forEach(channelSetup => toneArray.push(new Tone.FMSynth(channelSetup).toMaster()))
+    channelToneArray = []
+    channelSetupArray.forEach(channelSetup => {
+      const newSource = new Tone.Oscillator(channelSetup).toMaster()
+      newSource.volume = minGain
+      channelToneArray.push(newSource)
+    })
     tonesSetup = true
   }
 
-  function disposeTones() {
-    console.log('Disposing of tones')
-    toneArray.forEach( tone => tone.dispose() )
-    toneArray = []
-    tonesSetup = false
-  }
-
-  function playTones() {
-    console.log('Playing sequencer')
+  function sequenceTones() {
+    console.log('Sequencing tones')
 
     const chanStartBeatArray = []
 
@@ -93,11 +99,27 @@
       const noteStartTxt = `+0:${noteStartBeats}:0`
       const noteLenTxt = `0:${noteLenBeats}:0`
 
-      const theTone = toneArray[channelIndex]
-      if (theTone) theTone.triggerAttackRelease(noteFreqHz, noteLenTxt, noteStartTxt, noteAmplitude)
+      const theTone = channelToneArray[channelIndex]
+      if (theTone) {
+        theTone.frequency.setValueAtTime(noteFreqHz, noteStartTxt)
+        theTone.volume.linearRampTo(noteFinalGainDb, timeConstantS, noteStartTxt)
+      }
+      // if (theTone) theTone.triggerAttackRelease(noteFreqHz, noteLenTxt, noteStartTxt, noteAmplitude)
 
-      console.log(`Playing note on channel ${channelNum} from ${noteStartBeats.toFixed(2)} to ${noteEndBeats.toFixed(2)} beats, at ${noteFreqHz.toFixed(2)}Hz, with gain ${noteFinalGainDb.toFixed(1)} (amplitude ${noteAmplitude.toFixed(4)})`)
+      console.log(`Sequencing note on channel ${channelNum} from ${noteStartBeats.toFixed(2)} to ${noteEndBeats.toFixed(2)} beats, at ${noteFreqHz.toFixed(2)}Hz, with gain ${noteFinalGainDb.toFixed(1)} (amplitude ${noteAmplitude.toFixed(4)})`)
     })
+  }
+
+  function startTones() {
+    console.log('Starting tones')
+    channelToneArray.forEach( tone => tone.start() )
+  }
+
+  function disposeTones() {
+    console.log('Disposing of tones')
+    channelToneArray.forEach( tone => tone.dispose() )
+    channelToneArray = []
+    tonesSetup = false
   }
 
   function toggleTones() {
@@ -105,7 +127,8 @@
       disposeTones()
     } else {
       setupTones()
-      playTones()
+      sequenceTones()
+      startTones()
     }
   }
 
