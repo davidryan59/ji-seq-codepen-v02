@@ -34,14 +34,20 @@
     [2, 4, 400],
   ]
 
-  const saw13Type = {type: 'sawtooth13'}
-  const triType = {type: 'triangle'}
+  const triOsc = {type: 'triangle'}
+  const sineOsc = {type: 'sine'}
+  const sqOsc = {type: 'square'}
+  const sawOsc = {type: 'sawtooth'}
   const chipEnv = {attack: 0.001, decay: 0.0001, sustain: 1, release: 0.01}
+  const slowEnv = {attack: 0.2, decay: 0.2, sustain: 0.5, release: 1}
 
   const channelSetupArray = [
-    {channelGainDb: -2, oscillator: saw13Type, envelope: chipEnv},
-    {oscillator: triType, envelope: chipEnv},
+    {channelGainDb: 0, harmonicity: 1, modulationIndex: 5,
+      oscillator: triOsc, envelope: chipEnv, modulation: triOsc, modulationEnvelope: chipEnv},
+    {channelGainDb: -3, harmonicity: 2, modulationIndex: 3,
+      oscillator: triOsc, envelope: chipEnv, modulation: triOsc, modulationEnvelope: chipEnv},
   ]
+  // Bug in FMSynth - oscillator and modulation appear not to work...
 
   const minGain = -200
   Tone.Transport.bpm.value = beatsPerMinute;
@@ -51,7 +57,7 @@
   function setupTones() {
     console.log('Setting up tones')
     toneArray = []
-    channelSetupArray.forEach(channelSetup => toneArray.push(new Tone.Synth(channelSetup).toMaster()))
+    channelSetupArray.forEach(channelSetup => toneArray.push(new Tone.FMSynth(channelSetup).toMaster()))
     tonesSetup = true
   }
 
