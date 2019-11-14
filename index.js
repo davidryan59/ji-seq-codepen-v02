@@ -10,11 +10,12 @@
   const mainGainDb = -10
   const minGainDb = -200
   const maxBeats = 256
-  const maxFreqHz = 22050
+  const sampleRateHz = 44100
 
   // Timbre constants - MOVE THESE to a per-instrument basis
-  const resFreq1_Hz = 300
-  const resFreq2_Hz = 80
+  const resFreqL_Hz = 12.0123
+  const resFreqM_Hz = 53.1357
+  const resFreqR_Hz = 189.0123
 
   // Controls number of channels, and their sound
   const channelSetupArray = [
@@ -35,60 +36,93 @@
 
     [1, dt, 400, minGainDb],
     [1, 1, 400, 0],
-    [1, 1, 400],
-    [1, 1, 500],
-    [1, 1, 500],
-    [1, 1, 600],
-    [1, 1, 600],
-    [1, 1, 900],
-    [1, 1, 900],
-    [1, 1, 800],
     [1, 1, 300],
-    [1, 1, 400],
-    [1, 1, 400],
-    [1, 1, 400],
-    [1, 4, 400, minGainDb],
+    [1, 1, 300],
+    [1, 0.5, 400],
+    [1, 0.5, 400],
+    [1, 0.5, 450],
+    [1, 0.5, 450],
+    [1, 0.5, 500],
+    [1, 0.5, 500],
+    [1, 0.5, 600],
+    [1, 0.5, 600],
+    [1, 1, 550],
+    [1, 1, 550],
+    [1, 1, 700],
+    [1, 1, 700],
+    [1, 1, 600],
+    [1, 4, 600, minGainDb],
   ]
 
   Tone.Transport.bpm.value = beatsPerMinute;
   const maxChannel = channelSetupArray.length
-  const maxGainToTestDb = -4 * minGainDb    // Give more space for supplied gain values
+  const testGainDb = -4 * minGainDb    // Test data values within a wider range
+  const nyqFreqHz = 0.5 * sampleRateHz // Freq data values within Nyquist range
   let tonesToStart = []
+  let channelControls = []
   let tonesToDispose = []
   let tonesSetup = false
 
   function setupTones() {
     console.log('Setting up tones')
     tonesToStart = []
+    channelControls = []
     tonesToDispose = []
     channelSetupArray.forEach(channelSetup => {
+      // Calculations
+      const theDelayTimeL_s = 0.5 / resFreqL_Hz
+      const theDelayTimeM_s = 0.5 / resFreqM_Hz
+      const theDelayTimeR_s = 0.5 / resFreqR_Hz
       // Create tones
       const newSource = new Tone.Oscillator(channelSetup)
-      const theDelayTime1_s = 0.5 / resFreq1_Hz
-      const theDelayTime2_s = 0.5 / resFreq2_Hz
-      const newDelay1 = new Tone.Delay(theDelayTime1_s, theDelayTime1_s)
-      const newDelay2 = new Tone.Delay(theDelayTime2_s, theDelayTime2_s)
-      const newDelayGain = new Tone.Gain(-0.5)
-      // Link tones
+      const newDelayL = new Tone.Delay(theDelayTimeL_s, theDelayTimeL_s)
+      const newDelayM = new Tone.Delay(theDelayTimeM_s, theDelayTimeM_s)
+      const newDelayR = new Tone.Delay(theDelayTimeR_s, theDelayTimeR_s)
+      const newGainL = new Tone.Gain(-0.25)  // With same resFreq, these all cancel out
+      const newGainM = new Tone.Gain(-0.5)
+      const newGainR = new Tone.Gain(-0.25)
+      const newPannerL = new Tone.Panner(-1)
+      const newPannerR = new Tone.Panner(1)
+      // Connect tones
       newSource.chain(Tone.Master)
-      newSource.chain(newDelay1, newDelayGain, Tone.Master)
-      newSource.chain(newDelay2, newDelayGain, Tone.Master)
+      newSource.chain(newDelayL, newGainL, newPannerL, Tone.Master)
+      newSource.chain(newDelayM, newGainM, Tone.Master)
+      newSource.chain(newDelayR, newGainR, newPannerR, Tone.Master)
       // Store tones
       tonesToStart.push(newSource)
       tonesToDispose.push(newSource)
-      tonesToDispose.push(newDelay1)
-      tonesToDispose.push(newDelay2)
-      tonesToDispose.push(newDelayGain)
+      tonesToDispose.push(newDelayL)
+      tonesToDispose.push(newGainL)
+      tonesToDispose.push(newPannerL)
+      tonesToDispose.push(newDelayM)
+      tonesToDispose.push(newGainM)
+      tonesToDispose.push(newDelayR)
+      tonesToDispose.push(newGainR)
+      tonesToDispose.push(newPannerR)
+      // Store control parameters
+      const channelControl = {}
+      channelControls.push(channelControl)
+      channelControl.freq = newSource.frequency
+      channelControl.gain = newSource.volume
     })
+  }
+
+  // Helper function to change parameters with linear ramps
+  let noteStartTxt, noteLenTxt
+  const doLinearRamp = (toneControl, varDescription, minVal, maxVal, dataVal, addVal=0) => {
+    if (toneControl && Number.isFinite(dataVal)) {
+      const newVal = dataVal + addVal
+      if (minVal <= newVal && newVal <= maxVal) {
+        toneControl.linearRampTo(newVal, noteLenTxt, noteStartTxt)
+        console.log(`- - Linear ${varDescription} ramp to ${newVal}`)
+      }
+    }
   }
 
   function sequenceTones() {
     console.log('Sequencing tones')
-
     const chanStartBeatArray = []
-
     sequencedData.forEach( rowData => {
-
       // Deal with channel
       const channelNum = rowData[0]     // Should be 1 ... maxChannel
       if (!Number.isInteger(channelNum) || channelNum < 1 || maxChannel < channelNum) return
@@ -97,35 +131,26 @@
       const channelSetup = channelSetupArray[channelIndex]
       const channelGainDb = channelSetup ? channelSetup.channelGainDb || 0 : 0
       console.log(`Channel ${channelNum} with index ${channelIndex} and gain ${channelGainDb}`)
-
       // Deal with timing
       const noteLenBeats = rowData[1]   // Should be positive number <= maxBeats
       if (!Number.isFinite(noteLenBeats) || noteLenBeats <= 0 || maxBeats < noteLenBeats) return
-      const noteLenTxt = `0:${noteLenBeats}:0`
       const noteStartBeat = chanStartBeatArray[channelIndex] || 0
-      const noteStartTxt = `+0:${noteStartBeat}:0`
       const noteEndBeat = noteStartBeat + noteLenBeats
       chanStartBeatArray[channelIndex] = noteEndBeat
       console.log(`- Beat start ${noteStartBeat} length ${noteLenBeats} end ${noteEndBeat}`)
-
-      // Later on, the parameters might be spread out over more than 1 tone...
-      const theTone = tonesToStart[channelIndex]
-      if (theTone) {
-
+      // Change the channel controls
+      const chanCtrls = channelControls[channelIndex]
+      if (chanCtrls) {
+        // Supply timing info to doLinearRamp
+        noteStartTxt = `+0:${noteStartBeat}:0`
+        noteLenTxt = `0:${noteLenBeats}:0`
         // Deal with frequency changes
-        const noteFreqHz = rowData[2]
-        if (Number.isFinite(noteFreqHz) && -maxFreqHz <= noteFreqHz && noteFreqHz <= maxFreqHz) {
-          theTone.frequency.linearRampTo(noteFreqHz, noteLenTxt, noteStartTxt)
-          console.log(`- - Linear frequency ramp to ${noteFreqHz}`)
-        }
-
+        const newFreqHz = rowData[2]
+        doLinearRamp(chanCtrls.freq, 'frequency', -nyqFreqHz, nyqFreqHz, newFreqHz)
         // Deal with gain changes
         const noteGainDb = rowData[3]
-        if (Number.isFinite(noteGainDb) && -maxGainToTestDb <= noteGainDb && noteGainDb <= maxGainToTestDb) {
-          const totalGainDb = mainGainDb + channelGainDb + noteGainDb
-          theTone.volume.linearRampTo(totalGainDb, noteLenTxt, noteStartTxt)
-          console.log(`- - Linear gain ramp to ${totalGainDb}`)
-        }
+        const addGainDb = mainGainDb + channelGainDb
+        doLinearRamp(chanCtrls.gain, 'gain', -testGainDb, testGainDb, noteGainDb, addGainDb)
       }
     })
   }
@@ -137,12 +162,14 @@
 
   function disposeTones() {
     console.log('Disposing of tones')
+    tonesToStart = []
+    channelControls = []
     tonesToDispose.forEach( tone => tone.dispose() )
     tonesToDispose = []
-    tonesToStart = []
   }
 
   function toggleTones() {
+    console.log('Toggle tones called')
     if (tonesSetup) {
       disposeTones()
       tonesSetup = false
