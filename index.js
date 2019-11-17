@@ -11,6 +11,7 @@
   const minGainDb = -200
   const maxBeats = 256
   const sampleRateHz = 44100
+  const isVerbose = true
 
   // Timbre constants - MOVE THESE to a per-instrument basis
   const resFreqL_Hz = 12.0123
@@ -18,40 +19,67 @@
   const resFreqR_Hz = 189.0123
 
   // Controls number of channels, and their sound
+  // Currently most attributes are inputs to Tone.FMOscillator
+  const mg = minGainDb
   const channelSetupArray = [
-    {channelGainDb: -3, type: 'triangle'},
-    {channelGainDb: -50, type: 'triangle'},
+    {channelGainDb: -8, type: 'triangle', modulationType: 'triangle', volume: mg},
+    {channelGainDb: -3, type: 'triangle', modulationType: 'triangle', volume: mg},
   ]
 
   // Sequencing of how parameters of channel change over time, using LINEAR ramping.
   // Each sub-array is a single note of format:
-  // [ channelNum, noteLengthBeats, frequencyHz, noteGainDb ]
+  // [ channelNum, noteLengthBeats, frequencyHz, noteGainDb, harmonicity, modulationIndex ]
   // channelNum 1, 2, 3... is mandatory, all the rest are optional
   // noteLengthBeats is number 0 < x <= 256
   // frequencyHz is any number -22050 <= x <= 22050
   // noteGainDb is any number -800 <= x <= 800
-  const dt = 0.0001
+  // harmonicity and modulationIndex are positive numbers <= 100
+  const dt1 = 0.0001
+  const dt2 = 0.01
   const sequencedData = [
-    [2, dt, 440, minGainDb],
+    [ 1,   dt1,   400,    mg,     1,     0 ],  // Setup all vars at dt1 and mg
+    [ 1,   dt2,      ,     0,      ,       ],  // and then fade in over dt2
 
-    [1, dt, 400, minGainDb],
-    [1, 1, 400, 0],
-    [1, 1, 300],
-    [1, 1, 300],
-    [1, 0.5, 400],
-    [1, 0.5, 400],
-    [1, 0.5, 450],
-    [1, 0.5, 450],
-    [1, 0.5, 500],
-    [1, 0.5, 500],
-    [1, 0.5, 600],
-    [1, 0.5, 600],
-    [1, 1, 550],
-    [1, 1, 550],
-    [1, 1, 700],
-    [1, 1, 700],
-    [1, 1, 600],
-    [1, 4, 600, minGainDb],
+    [ 2,   dt1,   100,    mg,     1,     3 ],
+    [ 2,   dt2,      ,     0,      ,       ],
+
+    [ 1,     1,   400,      ,      ,       ],
+    [ 1,     1,   400,      ,      ,       ],
+    [ 1,     2,   300,      ,      ,     4 ],
+    [ 1,     4,   300,      ,  0.01,       ],
+    [ 1,     2,   400,      ,      ,       ],
+    [ 1,     4,   400,      ,     1,       ],
+    [ 1,   0.5,   500,      ,      ,       ],
+    [ 1,   0.5,   500,      ,      ,       ],
+    [ 1,   0.5,   600,      ,      ,       ],
+    [ 1,   0.5,   600,      ,      ,       ],
+    [ 1,   0.5,   900,      ,      ,       ],
+    [ 1,   0.5,   900,      ,      ,       ],
+    [ 1,   0.5,   700,      ,      ,       ],
+    [ 1,   0.5,   700,      ,      ,       ],
+    [ 1,     1,   800,      ,      ,       ],
+    [ 1,     8,   800,      ,     2,       ],
+    [ 1,     1,   400,      ,      ,       ],
+    [ 1,     8,   400,      ,      ,    10 ],
+    [ 1,     1,   380,      ,      ,       ],
+    [ 1,     4,   380,      ,      ,       ],
+
+    [ 2,     7,   100,      ,      ,       ],
+    [ 2,     1,    90,      ,      ,       ],
+    [ 2,     7,    90,      ,      ,     4 ],
+    [ 2,     1,   120,      ,      ,       ],
+    [ 2,     3,   120,      ,      ,       ],
+    [ 2,     1,   130,      ,      ,       ],
+    [ 2,     3,   130,      ,      ,       ],
+    [ 2,     1,   150,      ,      ,       ],
+    [ 2,     3,   150,      ,      ,     2 ],
+    [ 2,     1,   110,      ,      ,       ],
+    [ 2,     3,   110,      ,      ,       ],
+    [ 2,     1,   100,      ,      ,       ],
+    [ 2,     7,   100,      ,      ,     5 ],
+
+    [ 1,     4,      ,    mg,      ,       ],  // Last line fade back to mg
+    [ 2,     4,      ,    mg,      ,       ],
   ]
 
   Tone.Transport.bpm.value = beatsPerMinute;
@@ -61,10 +89,9 @@
   let tonesToStart = []
   let channelControls = []
   let tonesToDispose = []
-  let tonesSetup = false
 
   function setupTones() {
-    console.log('Setting up tones')
+    if (isVerbose) console.log('Setup Tones called')
     tonesToStart = []
     channelControls = []
     tonesToDispose = []
@@ -74,7 +101,7 @@
       const theDelayTimeM_s = 0.5 / resFreqM_Hz
       const theDelayTimeR_s = 0.5 / resFreqR_Hz
       // Create tones
-      const newSource = new Tone.Oscillator(channelSetup)
+      const newSource = new Tone.FMOscillator(channelSetup)
       const newDelayL = new Tone.Delay(theDelayTimeL_s, theDelayTimeL_s)
       const newDelayM = new Tone.Delay(theDelayTimeM_s, theDelayTimeM_s)
       const newDelayR = new Tone.Delay(theDelayTimeR_s, theDelayTimeR_s)
@@ -104,23 +131,25 @@
       channelControls.push(channelControl)
       channelControl.freq = newSource.frequency
       channelControl.gain = newSource.volume
+      channelControl.harmonicity = newSource.harmonicity
+      channelControl.modulationIndex = newSource.modulationIndex
     })
   }
 
   // Helper function to change parameters with linear ramps
   let noteStartTxt, noteLenTxt
-  const doLinearRamp = (toneControl, varDescription, minVal, maxVal, dataVal, addVal=0) => {
-    if (toneControl && Number.isFinite(dataVal)) {
+  const doLinearRamp = (ctrlItem, varDescription, minVal, maxVal, dataVal, addVal=0) => {
+    if (ctrlItem && Number.isFinite(dataVal)) {
       const newVal = dataVal + addVal
       if (minVal <= newVal && newVal <= maxVal) {
-        toneControl.linearRampTo(newVal, noteLenTxt, noteStartTxt)
-        console.log(`- - Linear ${varDescription} ramp to ${newVal}`)
+        ctrlItem.linearRampTo(newVal, noteLenTxt, noteStartTxt)
+        if (isVerbose) console.log(`- - Linear ${varDescription} ramp to ${newVal}`)
       }
     }
   }
 
   function sequenceTones() {
-    console.log('Sequencing tones')
+    if (isVerbose) console.log('Sequence Tones called')
     const chanStartBeatArray = []
     sequencedData.forEach( rowData => {
       // Deal with channel
@@ -130,54 +159,57 @@
       // Could factor this out into an array?
       const channelSetup = channelSetupArray[channelIndex]
       const channelGainDb = channelSetup ? channelSetup.channelGainDb || 0 : 0
-      console.log(`Channel ${channelNum} with index ${channelIndex} and gain ${channelGainDb}`)
+      if (isVerbose) console.log(`Channel ${channelNum} with index ${channelIndex} and gain ${channelGainDb}`)
       // Deal with timing
       const noteLenBeats = rowData[1]   // Should be positive number <= maxBeats
       if (!Number.isFinite(noteLenBeats) || noteLenBeats <= 0 || maxBeats < noteLenBeats) return
       const noteStartBeat = chanStartBeatArray[channelIndex] || 0
       const noteEndBeat = noteStartBeat + noteLenBeats
       chanStartBeatArray[channelIndex] = noteEndBeat
-      console.log(`- Beat start ${noteStartBeat} length ${noteLenBeats} end ${noteEndBeat}`)
+      if (isVerbose) console.log(`- Beat start ${noteStartBeat} length ${noteLenBeats} end ${noteEndBeat}`)
       // Change the channel controls
-      const chanCtrls = channelControls[channelIndex]
-      if (chanCtrls) {
+      const chanCtrl = channelControls[channelIndex]
+      if (chanCtrl) {
         // Supply timing info to doLinearRamp
         noteStartTxt = `+0:${noteStartBeat}:0`
         noteLenTxt = `0:${noteLenBeats}:0`
         // Deal with frequency changes
         const newFreqHz = rowData[2]
-        doLinearRamp(chanCtrls.freq, 'frequency', -nyqFreqHz, nyqFreqHz, newFreqHz)
+        doLinearRamp(chanCtrl.freq, 'frequency', -nyqFreqHz, nyqFreqHz, newFreqHz)
         // Deal with gain changes
         const noteGainDb = rowData[3]
-        const addGainDb = mainGainDb + channelGainDb
-        doLinearRamp(chanCtrls.gain, 'gain', -testGainDb, testGainDb, noteGainDb, addGainDb)
+        doLinearRamp(chanCtrl.gain, 'gain', -testGainDb, testGainDb, noteGainDb, mainGainDb + channelGainDb)
+        // Deal with harmonicity changes
+        const newHarmonicity = rowData[4]
+        doLinearRamp(chanCtrl.harmonicity, 'harmonicity', 0, 100, newHarmonicity)
+        // Deal with modulationIndex changes
+        const newModIndex = rowData[5]
+        doLinearRamp(chanCtrl.modulationIndex, 'modulationIndex', 0, 100, newModIndex)
       }
     })
   }
 
   function startTones() {
-    console.log('Starting tones')
+    if (isVerbose) console.log('Start Tones called')
     tonesToStart.forEach( tone => tone.start() )
   }
 
   function disposeTones() {
-    console.log('Disposing of tones')
+    if (isVerbose) console.log('Dispose Tones called')
     tonesToStart = []
     channelControls = []
     tonesToDispose.forEach( tone => tone.dispose() )
     tonesToDispose = []
   }
 
+  let disposedToggle = true
   function toggleTones() {
-    console.log('Toggle tones called')
-    if (tonesSetup) {
+    if (disposedToggle=!disposedToggle) {
       disposeTones()
-      tonesSetup = false
     } else {
       setupTones()
       sequenceTones()
       startTones()
-      tonesSetup = true
     }
   }
 
