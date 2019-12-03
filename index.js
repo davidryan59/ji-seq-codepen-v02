@@ -100,8 +100,11 @@
       const theDelayTimeL_s = 0.5 / resFreqL_Hz
       const theDelayTimeM_s = 0.5 / resFreqM_Hz
       const theDelayTimeR_s = 0.5 / resFreqR_Hz
-      // Create tones
+      // Create source tones
       const newSource = new Tone.FMOscillator(channelSetup)
+      // Store source tones
+      tonesToStart.push(newSource)
+      // Create non-source tones
       const newDelayL = new Tone.Delay(theDelayTimeL_s, theDelayTimeL_s)
       const newDelayM = new Tone.Delay(theDelayTimeM_s, theDelayTimeM_s)
       const newDelayR = new Tone.Delay(theDelayTimeR_s, theDelayTimeR_s)
@@ -110,13 +113,7 @@
       const newGainR = new Tone.Gain(-0.25)
       const newPannerL = new Tone.Panner(-1)
       const newPannerR = new Tone.Panner(1)
-      // Connect tones
-      newSource.chain(Tone.Master)
-      newSource.chain(newDelayL, newGainL, newPannerL, Tone.Master)
-      newSource.chain(newDelayM, newGainM, Tone.Master)
-      newSource.chain(newDelayR, newGainR, newPannerR, Tone.Master)
-      // Store tones
-      tonesToStart.push(newSource)
+      // Store all (source and non-source) tones
       tonesToDispose.push(newSource)
       tonesToDispose.push(newDelayL)
       tonesToDispose.push(newGainL)
@@ -126,6 +123,11 @@
       tonesToDispose.push(newDelayR)
       tonesToDispose.push(newGainR)
       tonesToDispose.push(newPannerR)
+      // Make internal component connections
+      newSource.chain(Tone.Master)
+      newSource.chain(newDelayL, newGainL, newPannerL, Tone.Master)
+      newSource.chain(newDelayM, newGainM, Tone.Master)
+      newSource.chain(newDelayR, newGainR, newPannerR, Tone.Master)
       // Store control parameters
       const channelControl = {}
       channelControls.push(channelControl)
